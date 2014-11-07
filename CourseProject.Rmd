@@ -1,0 +1,86 @@
+---
+title: "Practical Machine Learning Prediction Assignment"
+author: "Scott J"
+date: "Thursday, November 06, 2014"
+output: html_document
+---
+
+#Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <http://groupware.les.inf.puc-rio.br/har> (see the section on the Weight Lifting Exercise Dataset).
+
+# Data
+The training data for this project are available here: 
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+The test data are available here: 
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+The data for this project come from this source: <http://groupware.les.inf.puc-rio.br/har>.
+
+# Preprocessing
+## Load Data
+```{r warnings = FALSE, cache=TRUE, message=F}
+library(RCurl)
+data <- getURL("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",  ssl.verifypeer=0L, followlocation=1L)
+data1 <- getURL("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",  ssl.verifypeer=0L, followlocation=1L)
+training <- read.csv(text=data)
+testing <- read.csv(text=data1)
+dim(training)
+```
+## Data Filtering
+   1. Create tidy data set by removing columns removing columns with insufficient data.  67 columns only have 406 of 19622
+   values.  Remove these columns
+   2. Remove data columns that contain non informative descriptors (x, user_name, raw time stamp 1  and 2, "new_window" and "num_window")
+   3. Remove columns of data with near zero varaince
+
+```{r message=FALSE}
+library(caret)
+training <- training[,which(colSums(!is.na(training))>500)]
+training <- training[,8:ncol(training)]
+training <- training[,which(nearZeroVar(training, saveMetrics = TRUE)$nzv=="FALSE")]
+```
+
+##Splitting data in training and testing for model cross validation
+
+Split the data: 60% for training, 40% for testing
+```{r, cache=TRUE}
+trainIndex <- createDataPartition(y = training$classe, p=0.6,list=FALSE);
+trainingP <- training[trainIndex,];
+testingP <- training[-trainIndex,];
+dim(trainingP)
+dim(testingP)
+```
+
+
+## Create Models
+A number of different models including Random Forest, Gradient boosted mode, naive bayes, k-nearest neighbors, support vector machine and Linear discriminant analysis were tuned and tested. The random forest algorthim gave the highest accuracy was selected for further development.  Due to performance issues the other algorthim are not presented
+
+```{r, cache=TRUE, message=FALSE}
+#parallel computing for multi-core to improve performance
+library(doParallel)
+registerDoParallel(makeCluster(detectCores()))
+#Random Forest model
+mod1 <- train(classe ~ ., data = trainingP, method = "rf")
+
+pred1 <- predict(mod1,testingP)
+c1 <- confusionMatrix(pred1, testingP$classe)
+c1
+```
+
+```{r echo=FALSE}
+accuracy <- sum(pred1 == testingP$classe) / length(pred1)
+```
+
+The out of sample error rate is expected to be `r format ((1- accuracy) *100, digits=3)`%.  This was determined by cross validation on the 40% of the data that was not used to train the model
+
+#Conclusion:
+Random Forest produced an very accurate prediction with greater then `r format(accuracy * 100,digits=4)`%.
+
+#Test Set Prediction
+The prediction for the unknown test set is:
+```{r}
+
+ScoreTest <- testing[,names(testing) %in% names(trainingP)]
+answers = predict(mod1,ScoreTest)
+
+answers
+```
